@@ -1,190 +1,79 @@
-# Reasoning-Augmented Fine-Tuning of Gemma 7B for Implicit Sentiment Analysis
+﻿# ReasonTune-ISA
 
-This repository contains the source code and experimental results for our research on **Implicit Sentiment Analysis (ISA)** using **Gemma 7B** with LoRA fine-tuning. We propose a **Reasoning-Augmented Fine-Tuning** approach that leverages GPT-4o-generated Chain-of-Thought (CoT) reasoning to improve implicit sentiment detection.
+Research code and saved predictions for **Investigating the Role of Reasoning Augmentation in Parameter-Efficient Fine-Tuning for Implicit Sentiment Analysis**.
 
-## Overview
+**ATAC 2026 · Accepted · Oral presentation delivered**
+[Manuscript](https://drive.google.com/file/d/1ISDo2Vxnub7e98TCMxbe92PE17-26XiK/view) · [Training notebooks](#reproduce) · [Saved results](#results)
 
-Implicit Sentiment Analysis is the task of identifying sentiment when no explicit opinion words are present (e.g., *"The laptop weighs 5 pounds"* → negative toward **weight**). This is significantly harder than explicit sentiment analysis.
+## Study
 
-We investigate two fine-tuning strategies:
-1. **Standard Fine-Tuning**: Direct `Sentence + Aspect → Sentiment` mapping
-2. **Reasoning-Augmented Fine-Tuning (CoT)**: `Sentence + Aspect + GPT-4o Expert Analysis → Sentiment`, where GPT-4o provides step-by-step reasoning about implicit cues
+We compare standard and reasoning-augmented **LoRA fine-tuning of Gemma-7B** on the Restaurant and Laptop domains of SemEval-2014, using the implicit-sentiment annotations described in the manuscript.
 
-Both approaches use **Gemma 7B** as the base model with **LoRA adapters** for parameter-efficient fine-tuning.
+- **Standard** inputs contain the sentence and target aspect.
+- **Reasoning-augmented** inputs also contain GPT-4o-generated linguistic rationales at both training and inference time. Rationale generation uses the sentence and aspect, without the gold sentiment label.
+- Both settings use BF16 base weights, LoRA rank 64, alpha 128, dropout 0.1, four epochs, and a learning rate of `2e-4`.
 
-## Repository Structure
+![Framework comparing standard and GPT-4o reasoning-augmented inputs for Gemma-7B LoRA fine-tuning](assets/framework.png)
 
-```
-├── ISA_Standard_FineTuning_Gemma.ipynb     # Standard fine-tuning pipeline
-├── ISA_Reasoning_FineTuning_Gemma.ipynb    # Reasoning-augmented (CoT) fine-tuning pipeline
-├── baselines/                              # Baseline implementations (zero-shot, few-shot, CoT)
-│   ├── run_baseline.py                     # Main baseline runner
-│   ├── run_all_baselines.py                # Batch runner for all experiments
-│   └── prompts.py                          # Prompt templates
-├── data/
-│   ├── laptop/                             # SemEval-style XML data (Laptop domain)
-│   ├── restaurant/                         # SemEval-style XML data (Restaurant domain)
-│   └── reasoning_augmented/                # CSV data with GPT-4o reasoning annotations
-├── evaluation_results/                     # Evaluation metrics (Standard & Reasoning)
-├── inference_results/                      # Model predictions on test sets (CSV)
-├── LICENSE
-└── README.md
-```
+*Color version of the framework. The camera-ready manuscript uses a grayscale version to meet conference requirements.*
 
-## Methodology
+## Results
 
-### Standard Fine-Tuning
-- Fine-tune Gemma 7B with LoRA on aspect-level sentiment classification
-- Input format: `Instruction + Sentence + Aspect → Sentiment`
+Saved implicit-subset accuracy, reproduced from the prediction CSVs without running model inference.
 
-### Reasoning-Augmented Fine-Tuning (CoT)
-1. **Reasoning Generation**: Use GPT-4o to generate expert linguistic analysis for each sample, following a structured 3-step guideline:
-   - *Contextual Anchoring & Domain Standards*
-   - *Evidence Extraction (Explicit & Implicit cues)*
-   - *Synthesis & Knowledge Transfer*
-2. **Fine-Tuning**: Train Gemma 7B with the enriched input: `Sentence + Aspect + Expert Analysis → Sentiment`
-3. **Inference**: Evaluate on test sets that also include GPT-4o reasoning
+| Setting | Restaurant ISA (267 examples) | Laptop ISA (175 examples) |
+| --- | ---: | ---: |
+| Standard LoRA | **75.28%** | **81.14%** |
+| Reasoning-augmented LoRA | 74.53% | 76.00% |
 
-### Training Configuration
+These results highlight the limits of reasoning augmentation on the implicit subsets, with a larger accuracy decrease in the Laptop domain.
 
-Both approaches share the same hyperparameters:
+The reasoning setting uses teacher-generated rationales during inference. Reported scores correspond to the archived prediction files and the evaluation protocol in the notebooks.
 
-| Parameter | Value |
-|-----------|-------|
-| Base Model | `google/gemma-7b` (BFloat16) |
-| LoRA Rank | 64 |
-| LoRA Alpha | 128 |
-| LoRA Dropout | 0.1 |
-| Learning Rate | 2e-4 |
-| LR Scheduler | Cosine |
-| Epochs | 4 |
-| Batch Size | 8 |
-| Gradient Accumulation Steps | 2 |
-| Max Sequence Length | 1024 |
+## Reproduce
 
-## Getting Started
+The notebooks target **Google Colab with an NVIDIA A100** and Google Drive storage. Local execution requires adapting the `/content/drive/MyDrive/ATAC2026/` paths.
 
-### Prerequisites
-- Python 3.10+
-- NVIDIA GPU with >= 40GB VRAM (A100 recommended)
-- Google Colab Pro (recommended)
-- Hugging Face account with Gemma model access
+1. Obtain Hugging Face access to `google/gemma-7b` and provide your token through your runtime's secret store.
+2. Open either notebook below and review its installation and path-configuration cells.
+3. Run training, inference, and evaluation in order. Existing predictions and reports can also be inspected directly.
 
-### Installation
+| Entry point | Purpose |
+| --- | --- |
+| [`ISA_Standard_FineTuning_Gemma.ipynb`](ISA_Standard_FineTuning_Gemma.ipynb) | Standard LoRA training and evaluation |
+| [`ISA_Reasoning_FineTuning_Gemma.ipynb`](ISA_Reasoning_FineTuning_Gemma.ipynb) | Rationale generation, augmented training, and evaluation |
 
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-pip install transformers peft bitsandbytes trl accelerate scikit-learn openai tqdm
-```
+The reasoning notebook can use the supplied rationale CSVs. Generating new rationales requires Azure OpenAI access and incurs API charges. Configure its Azure client cells before execution.
 
-### Usage
+**Reproduction note.** Library versions, GPU runtimes, and hosted model deployments evolve over time. New runs may produce different results, particularly when regenerating rationales. Use the supplied rationales and archived predictions to inspect the reported experiments in their original form.
 
-1. **Standard Fine-Tuning**: Open and run `ISA_Standard_FineTuning_Gemma.ipynb`
-2. **Reasoning-Augmented Fine-Tuning**: Open and run `ISA_Reasoning_FineTuning_Gemma.ipynb`
+### Prompting baseline
 
-> **Note**: Both notebooks were originally designed for Google Colab with Google Drive integration. You may need to adjust file paths for local execution.
-
-### Required Credentials
-- Set your **Hugging Face token** in the notebook configuration cell (requires Gemma model access)
-- For reasoning generation: Set your **OpenAI / Azure OpenAI API key** in the Reasoning notebook
-
-## Data
-
-The datasets are based on **SemEval 2014 Task 4** (Laptop and Restaurant reviews), extended with **implicit sentiment annotations**. Each aspect-term pair is labeled with:
-- `sentiment`: positive / negative / neutral
-- `is_implicit`: whether the sentiment is expressed implicitly
-
-The `reasoning_augmented/` directory contains the same data enriched with GPT-4o-generated expert analysis.
-
-## Baseline Experiments
-
-We provide three baseline implementations using Azure OpenAI API (GPT-4o) to evaluate different prompting strategies:
-
-### Baseline Methods
-
-1. **Zero-shot**: Simple task instruction without examples
-2. **Few-shot**: Task instruction with 3 domain-specific examples
-3. **Chain-of-Thought (CoT)**: Step-by-step reasoning instruction
-
-### Prerequisites
-
-- Python 3.10+
-- Azure OpenAI API access
-
-### Installation
+The included runner supports Azure OpenAI deployments with zero-shot, few-shot, and CoT-style prompts. Set `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, and `AZURE_OPENAI_API_VERSION` in the environment.
 
 ```bash
 pip install pandas scikit-learn openai
-```
-
-### Configuration
-
-Set the following environment variables:
-
-```bash
-export AZURE_OPENAI_KEY="your_api_key"
-export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com"
-export AZURE_OPENAI_API_VERSION="2024-05-01-preview"
-```
-
-### Usage
-
-**Run a specific baseline:**
-
-```bash
 python baselines/run_baseline.py \
-    --input ./data/reasoning_augmented/laptop_test_reasoning.csv \
-    --output ./baseline_results/laptop_zero_shot.csv \
-    --prompt-type zero-shot
+  --input data/reasoning_augmented/laptop_test_reasoning.csv \
+  --output baseline_results/laptop_zero_shot.csv \
+  --prompt-type zero-shot \
+  --model YOUR_AZURE_DEPLOYMENT
 ```
 
-**Run all three baselines on all datasets:**
+The runner consumes the sentence and aspect columns and provides the Azure OpenAI prompting workflow. See the manuscript for the complete set of model comparisons.
 
-```bash
-python baselines/run_all_baselines.py \
-    --data-dir ./data/reasoning_augmented \
-    --output-dir ./baseline_results
-```
+## Repository map
 
-### Arguments
+| Directory | Contents |
+| --- | --- |
+| `data/` | Annotated XML splits and rationale-augmented CSVs |
+| `baselines/` | Prompt templates and Azure OpenAI runners |
+| `inference_results/` | Saved standard and reasoning-augmented predictions |
+| `evaluation_results/` | Overall, explicit-subset, and implicit-subset metrics |
+| `assets/` | Framework figure for this README |
 
-**run_baseline.py:**
-- `--input` (required): Path to input CSV with 'text' and 'aspect' columns
-- `--output` (required): Path for output CSV with predictions
-- `--prompt-type` (required): One of `zero-shot`, `few-shot`, `cot`
-- `--model` (optional): Model name (default: `gpt-4o`)
-
-**run_all_baselines.py:**
-- `--data-dir`: Directory with input CSVs (default: `./data/reasoning_augmented`)
-- `--output-dir`: Directory for outputs (default: `./baseline_results`)
-- `--datasets`: CSV files to process
-- `--prompt-types`: Strategies to run
-
-### Output Format
-
-Results are saved as CSV with:
-```
-text, aspect, sentiment, is_implicit, reasoning, predicted_sentiment
-```
-
-### Evaluation Metrics
-
-When ground truth labels are present, the following metrics are displayed:
-- **Accuracy**
-- **F1-score** (macro-averaged)
-
-### Prompt Designs
-
-**Zero-shot:** Simple instruction without examples
-
-**Few-shot:** Instruction with 3 domain-specific examples (different for laptop vs restaurant domains)
-
-**CoT:** Instruction to reason step-by-step:
-1. Analyze text for implicit opinions and pragmatic cues
-2. Consider contextual signals (sarcasm, understatement, contrast)
-3. Infer underlying sentiment toward target
-
+The manuscript contains the methodology and dataset references. Proceedings and a DOI are pending.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+The repository includes an [MIT license](LICENSE). Consult the original sources for terms governing third-party datasets and model weights.
